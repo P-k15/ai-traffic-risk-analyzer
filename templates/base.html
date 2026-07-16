@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}AI Traffic Intelligence System{% endblock %}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0d1117; --card: #161b22; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #f0b429;
+    --red: #e74c3c; --orange: #f39c12; --green: #27ae60;
+    --blue: #3b82f6;
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
+  .sidebar { width: 240px; background: var(--card); border-right: 1px solid var(--border); height: 100vh; position: fixed; top: 0; left: 0; padding: 24px 0; }
+  .logo { padding: 0 20px 24px; border-bottom: 1px solid var(--border); }
+  .logo h2 { color: var(--accent); font-size: 16px; font-weight: 700; }
+  .logo p { color: var(--muted); font-size: 11px; margin-top: 4px; }
+  .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 20px; color: var(--muted); text-decoration: none; font-size: 14px; transition: all 0.2s; }
+  .nav-item:hover, .nav-item.active { background: rgba(240,180,41,0.1); color: var(--accent); border-right: 3px solid var(--accent); }
+  .nav-item .icon { font-size: 18px; width: 20px; text-align: center; }
+  .main { margin-left: 240px; padding: 24px; }
+  .page-header { margin-bottom: 24px; }
+  .page-header h1 { font-size: 24px; font-weight: 700; }
+  .page-header p { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .stat-card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-card .value { font-size: 32px; font-weight: 700; margin: 8px 0 4px; }
+  .stat-card .sub { color: var(--muted); font-size: 12px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .card-title { font-size: 15px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-high { background: rgba(231,76,60,0.2); color: var(--red); }
+  .badge-medium { background: rgba(243,156,18,0.2); color: var(--orange); }
+  .badge-low { background: rgba(39,174,96,0.2); color: var(--green); }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .sidebar { display: none; } .main { margin-left: 0; } .grid-2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="sidebar">
+  <div class="logo">
+    <h2>🚦 TrafficIQ</h2>
+    <p>AI-Powered Intelligence System</p>
+  </div>
+  <nav style="margin-top:16px;">
+    <a href="/" class="nav-item {% block nav_dashboard %}{% endblock %}"><span class="icon">🗺️</span> Dashboard</a>
+    <a href="/analytics/" class="nav-item {% block nav_analytics %}{% endblock %}"><span class="icon">📊</span> Analytics</a>
+  </nav>
+  <div style="position:absolute;bottom:20px;left:20px;right:20px;">
+    <div style="background:rgba(240,180,41,0.1);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:11px;color:var(--muted);">
+      <div style="color:var(--accent);font-weight:600;margin-bottom:4px;">📍 Data Source</div>
+      Maharashtra road accident patterns based on NCRB / data.gov.in datasets
+    </div>
+  </div>
+</div>
+<div class="main">
+  {% block content %}{% endblock %}
+</div>
+</body>
+</html>

@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — TrafficIQ{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+
+{% block content %}
+<style>
+  #map { width: 100%; height: 500px; border-radius: 10px; border: 1px solid var(--border); }
+  .risk-panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
+  select, input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); font-size: 13px; }
+  select:focus, input:focus { outline: none; border-color: var(--accent); }
+  .btn { background: var(--accent); color: #000; border: none; border-radius: 6px; padding: 10px 20px; font-weight: 700; font-size: 14px; cursor: pointer; width: 100%; margin-top: 8px; }
+  .btn:hover { opacity: 0.9; }
+  .result-box { margin-top: 16px; padding: 16px; border-radius: 8px; border: 1px solid var(--border); display: none; }
+  .risk-title { font-size: 22px; font-weight: 800; }
+  .prob-bars { margin-top: 12px; }
+  .prob-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; }
+  .prob-bar-bg { flex: 1; background: var(--border); border-radius: 4px; height: 8px; }
+  .prob-bar-fill { height: 8px; border-radius: 4px; transition: width 0.5s; }
+  .nearby-list { margin-top: 12px; max-height: 150px; overflow-y: auto; }
+  .nearby-item { font-size: 11px; color: var(--muted); padding: 4px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+  .coords-info { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); border-radius: 6px; padding: 8px 12px; font-size: 12px; color: #7dd3fc; margin-bottom: 12px; display: none; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+</style>
+
+<div class="page-header">
+  <h1>Traffic Intelligence Dashboard</h1>
+  <p>Real-time accident risk analysis — Maharashtra road network</p>
+</div>
+
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="label">Total Accidents (Dataset)</div>
+    <div class="value" style="color:var(--accent)">{{ total_accidents }}</div>
+    <div class="sub">Across Maharashtra</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">High Risk Zones</div>
+    <div class="value" style="color:var(--red)">{{ high_risk_zones }}</div>
+    <div class="sub">Require immediate attention</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Fatal Accidents</div>
+    <div class="value" style="color:#e74c3c">{{ fatal_accidents }}</div>
+    <div class="sub">In dataset</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">ML Model</div>
+    <div class="value" style="color:var(--green);font-size:20px;">Random Forest</div>
+    <div class="sub">74% accuracy · 1500+ samples</div>
+  </div>
+</div>
+
+<div class="grid-2" style="margin-bottom:16px;">
+  <div>
+    <div class="card-title" style="margin-bottom:12px;">🗺️ Accident Heatmap — Click any location to analyze risk</div>
+    <div id="map"></div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#e74c3c"></div>High Risk Zone</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f39c12"></div>Medium Risk Zone</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#27ae60"></div>Low Risk Zone</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgba(231,76,60,0.3);border:1px dashed #e74c3c"></div>Accident Point</div>
+    </div>
+  </div>
+
+  <div class="risk-panel">
+    <div class="card-title">🔍 Zone Risk Analyzer</div>
+    <div class="coords-info" id="coords-info">📍 Selected: Loading...</div>
+    
+    <div class="form-row">
+      <div>
+        <label>Hour of Day</label>
+        <select id="hour">
+          {% for h in hours %}
+            <option value="{{ h }}" {% if h == 8 %}selected{% endif %}>
+               {{ h }}:00 {% if h < 12 %}AM{% else %}PM{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Weather</label>
+        <select id="weather">
+          <option>Clear</option><option>Rain</option><option>Fog</option><option>Overcast</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>Day Type</label>
+        <select id="day_type">
+          <option>Weekday</option><option>Weekend</option>
+        </select>
+      </div>
+      <div>
+        <label>Road Type</label>
+        <select id="road_type">
+          <option>Urban Road</option><option>Highway</option><option>Junction</option><option>Flyover</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>Vehicles Involved</label>
+        <select id="vehicles">
+          <option value="1">1</option><option value="2" selected>2</option>
+          <option value="3">3</option><option value="4">4+</option>
+        </select>
+      </div>
+      <div>
+        <label>Month</label>
+        <select id="month">
+          <option value="1">January</option><option value="2">February</option>
+          <option value="3">March</option><option value="4">April</option>
+          <option value="5">May</option><option value="6" selected>June</option>
+          <option value="7">July</option><option value="8">August</option>
+          <option value="9">September</option><option value="10">October</option>
+          <option value="11">November</option><option value="12">December</option>
+        </select>
+      </div>
+    </div>
+    
+    <button class="btn" onclick="analyzeRisk()">🔬 Analyze Risk with ML</button>
+    
+    <div class="result-box" id="result-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">ML RISK ASSESSMENT</div>
+          <div class="risk-title" id="risk-title">—</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:var(--muted);">Nearby Incidents</div>
+          <div id="nearby-count" style="font-size:24px;font-weight:700;">—</div>
+        </div>
+      </div>
+      <div id="recommendation" style="margin-top:10px;font-size:13px;padding:8px;background:var(--bg);border-radius:6px;"></div>
+      
+      <div class="prob-bars" id="prob-bars"></div>
+      
+      <div id="nearby-section" style="display:none;">
+        <div style="font-size:12px;color:var(--muted);margin-top:12px;margin-bottom:6px;">NEARBY ACCIDENT RECORDS</div>
+        <div class="nearby-list" id="nearby-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Zone Summary Table -->
+<div class="card">
+  <div class="card-title">📋 Zone Risk Summary</div>
+  <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border);">
+          <th style="text-align:left;padding:8px;color:var(--muted);">Zone</th>
+          <th style="text-align:left;padding:8px;color:var(--muted);">Accidents</th>
+          <th style="text-align:left;padding:8px;color:var(--muted);">Avg Risk</th>
+          <th style="text-align:left;padding:8px;color:var(--muted);">Fatals</th>
+          <th style="text-align:left;padding:8px;color:var(--muted);">Level</th>
+        </tr>
+      </thead>
+      <tbody id="zone-table"></tbody>
+    </table>
+  </div>
+</div>
+
+<input type="hidden" id="selected-lat" value="19.2183">
+<input type="hidden" id="selected-lng" value="72.9781">
+
+<script>
+const zonesData = JSON.parse('{{ zones|escapejs }}');
+let map, heatmapLayer, clickMarker;
+let selectedLat = 19.2183, selectedLng = 72.9781;
+
+// ✅ NOW INSIDE SCRIPT
+const tbody = document.getElementById('zone-table');
+zonesData.forEach(z => {
+  const color = z.risk_level === 'High' ? '#e74c3c' : z.risk_level === 'Medium' ? '#f39c12' : '#27ae60';
+  tbody.innerHTML += `<tr>
+    <td>${z.zone}</td>
+    <td>${z.total_accidents}</td>
+    <td>${(z.avg_risk*100).toFixed(0)}%</td>
+    <td>${z.fatal_count}</td>
+    <td>${z.risk_level}</td>
+  </tr>`;
+});
+
+
+function initMap() {
+  map = new google.maps.Map(document.getElementById('map'), {
+    center: { lat: 19.2, lng: 73.0 },
+    zoom: 9,
+    styles: [
+      {elementType:'geometry',stylers:[{color:'#1d2433'}]},
+      {elementType:'labels.text.fill',stylers:[{color:'#8b949e'}]},
+      {elementType:'labels.text.stroke',stylers:[{color:'#0d1117'}]},
+      {featureType:'road',elementType:'geometry',stylers:[{color:'#2a3441'}]},
+      {featureType:'road.arterial',elementType:'geometry',stylers:[{color:'#374151'}]},
+      {featureType:'water',elementType:'geometry',stylers:[{color:'#0d2137'}]},
+    ]
+  });
+
+  // Load accident points for heatmap
+  fetch('/api/zones/')
+    .then(r => r.json())
+    .then(data => {
+      // Heatmap layer
+      const heatPoints = data.points.map(p => ({
+        location: new google.maps.LatLng(p.latitude, p.longitude),
+        weight: p.risk_score
+      }));
+      heatmapLayer = new google.maps.visualization.HeatmapLayer({
+        data: heatPoints,
+        map: map,
+        radius: 30,
+        opacity: 0.7,
+        gradient: ['rgba(0,0,0,0)','rgba(39,174,96,0.8)','rgba(243,156,18,1)','rgba(231,76,60,1)']
+      });
+
+      // Zone markers
+      data.zones.forEach(z => {
+        const color = z.avg_risk >= 0.65 ? '#e74c3c' : z.avg_risk >= 0.4 ? '#f39c12' : '#27ae60';
+        const marker = new google.maps.Marker({
+          position: { lat: z.lat, lng: z.lng },
+          map: map,
+          title: z.zone,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: Math.min(20, 8 + z.count/15),
+            fillColor: color,
+            fillOpacity: 0.85,
+            strokeColor: '#fff',
+            strokeWeight: 2,
+          }
+        });
+        
+        const infoWindow = new google.maps.InfoWindow({
+          content: `<div style="background:#161b22;color:#e6edf3;padding:12px;border-radius:8px;min-width:180px;">
+            <b style="color:#f0b429">${z.zone}</b><br>
+            <span style="color:#8b949e;font-size:12px;">Accidents: ${z.count} | Fatals: ${z.fatal}</span><br>
+            <span style="color:${color};font-weight:700;">Avg Risk: ${(z.avg_risk*100).toFixed(0)}%</span>
+          </div>`
+        });
+        
+        marker.addListener('click', () => {
+          infoWindow.open(map, marker);
+          selectLocation(z.lat, z.lng, z.zone);
+        });
+      });
+    });
+
+  // Click anywhere on map to analyze
+  map.addListener('click', (e) => {
+    selectedLat = e.latLng.lat();
+    selectedLng = e.latLng.lng();
+    if (clickMarker) clickMarker.setMap(null);
+    clickMarker = new google.maps.Marker({
+      position: e.latLng,
+      map: map,
+      icon: { path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW, scale: 8, fillColor: '#f0b429', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }
+    });
+    selectLocation(selectedLat, selectedLng, 'Custom Location');
+  });
+}
+
+function selectLocation(lat, lng, name) {
+  selectedLat = lat; selectedLng = lng;
+  document.getElementById('selected-lat').value = lat;
+  document.getElementById('selected-lng').value = lng;
+  const info = document.getElementById('coords-info');
+  info.style.display = 'block';
+  info.textContent = `📍 Selected: ${name} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+}
+
+function analyzeRisk() {
+  const payload = {
+    hour: parseInt(document.getElementById('hour').value),
+    weather: document.getElementById('weather').value,
+    day_type: document.getElementById('day_type').value,
+    road_type: document.getElementById('road_type').value,
+    vehicles: parseInt(document.getElementById('vehicles').value),
+    month: parseInt(document.getElementById('month').value),
+    lat: selectedLat,
+    lng: selectedLng,
+  };
+
+  const btn = document.querySelector('.btn');
+  btn.textContent = '⏳ Analyzing...';
+  btn.disabled = true;
+
+  fetch('/api/risk/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+    body: JSON.stringify(payload)
+  })
+  .then(r => r.json())
+  .then(data => {
+    const box = document.getElementById('result-box');
+    box.style.display = 'block';
+    box.style.borderColor = data.risk_color;
+    box.style.background = `${data.risk_color}11`;
+    
+    const title = document.getElementById('risk-title');
+    title.textContent = `${data.risk_level} RISK`;
+    title.style.color = data.risk_color;
+    
+    document.getElementById('recommendation').textContent = data.recommendation;
+    document.getElementById('nearby-count').textContent = data.nearby_count;
+    
+    // Probability bars
+    const colors = {'High':'#e74c3c','Medium':'#f39c12','Low':'#27ae60'};
+    const probBars = document.getElementById('prob-bars');
+    probBars.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">CONFIDENCE BREAKDOWN</div>';
+    Object.entries(data.probabilities).forEach(([level, pct]) => {
+      probBars.innerHTML += `<div class="prob-bar-row">
+        <span style="width:60px;color:${colors[level]||'#8b949e'}">${level}</span>
+        <div class="prob-bar-bg"><div class="prob-bar-fill" style="width:${pct}%;background:${colors[level]||'#8b949e'}"></div></div>
+        <span style="width:35px;text-align:right">${pct}%</span>
+      </div>`;
+    });
+    
+    // Nearby accidents
+    if (data.nearby_accidents.length > 0) {
+      document.getElementById('nearby-section').style.display = 'block';
+      const list = document.getElementById('nearby-list');
+      list.innerHTML = '';
+      data.nearby_accidents.forEach(a => {
+        const sColor = a.severity === 'Fatal' ? '#e74c3c' : a.severity === 'Serious' ? '#f39c12' : '#27ae60';
+        list.innerHTML += `<div class="nearby-item">
+          <span>${a.zone.split(' - ')[1] || a.zone} · ${a.road_type} · ${a.hour}:00</span>
+          <span style="color:${sColor}">${a.severity}</span>
+        </div>`;
+      });
+    }
+    
+    btn.textContent = '🔬 Analyze Risk with ML';
+    btn.disabled = false;
+  });
+}
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : null;
+}
+</script>
+
+<script async defer
+  src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&libraries=visualization&callback=initMap">
+</script>
+{% endblock %}
